@@ -34,7 +34,7 @@
 
 #define GATTS_TAG "GATTS_DEMO"
 
-#define GPIO_OUTPUT_IO_0    18
+#define GPIO_OUTPUT_IO_0    5
 #define GPIO_OUTPUT_IO_1    19
 #define GPIO_OUTPUT_PIN_SEL  ((1<<GPIO_OUTPUT_IO_0) | (1<<GPIO_OUTPUT_IO_1))
 
@@ -149,7 +149,7 @@ static void init_led() {
     io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
     //set as output mode
     io_conf.mode = GPIO_MODE_OUTPUT;
-    //bit mask of the pins that you want to set,e.g.GPIO18/19
+    //bit mask of the pins that you want to set
     io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
     //disable pull-down mode
     io_conf.pull_down_en = 0;
