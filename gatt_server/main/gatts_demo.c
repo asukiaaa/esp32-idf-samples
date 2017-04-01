@@ -38,6 +38,19 @@
 #define GPIO_OUTPUT_IO_1    19
 #define GPIO_OUTPUT_PIN_SEL  ((1<<GPIO_OUTPUT_IO_0) | (1<<GPIO_OUTPUT_IO_1))
 
+#define GPIO_INPUT_IO_0     0
+#define GPIO_INPUT_IO_1     18
+#define GPIO_INPUT_PIN_SEL  ((1<<GPIO_INPUT_IO_0) | (1<<GPIO_INPUT_IO_1))
+
+#define ESP_INTR_FLAG_DEFAULT 0
+
+static xQueueHandle gpio_evt_queue = NULL;
+
+static void IRAM_ATTR gpio_isr_handler(void* arg) {
+    uint32_t gpio_num = (uint32_t) arg;
+    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+}
+
 ///Declare the static function 
 static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
 static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
@@ -143,6 +156,55 @@ static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
     },
 };
 
+// reference
+// https://www.esp32.com/viewtopic.php?t=806
+// http://esp-idf.readthedocs.io/en/latest/api/bluetooth/esp_gatts.html?highlight=indicate
+static void ble_indicate(int value) {
+    esp_gatt_if_t gatts_if = 4; // I'm not sure to fix gatts_if as 4.
+    uint16_t attr_handle = 0x002a;
+    uint8_t value_len = 1;
+    uint8_t value_arr[] = {value};
+    printf("ble indicate %d\n", value);
+    esp_ble_gatts_send_indicate(gatts_if, 0, attr_handle, value_len, value_arr, false);
+}
+
+static void gpio_task(void* arg) {
+    uint8_t io_num;
+    while (true) {
+        if (xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
+          int io_level = gpio_get_level(io_num);
+          printf("GPIO[%d] val: %d\n", io_num, io_level);
+          ble_indicate(io_level);
+        }
+    }
+}
+
+static void init_switch() {
+    gpio_config_t io_conf;
+    //interrupt of rising edge
+    io_conf.intr_type = GPIO_PIN_INTR_POSEDGE;
+    //bit mask of the pins, use GPIO4/5 here
+    io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
+    //set as input mode
+    io_conf.mode = GPIO_MODE_INPUT;
+    //enable pull-up mode
+    io_conf.pull_up_en = 1;
+    gpio_config(&io_conf);
+
+    //change gpio intrrupt type for one pin
+    gpio_set_intr_type(GPIO_INPUT_IO_0, GPIO_INTR_ANYEDGE);
+
+    //create a queue to handle gpio event from isr
+    gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+    //start gpio task
+    xTaskCreate(gpio_task, "gpio_task", 2048, NULL, 10, NULL);
+
+    //install gpio isr service
+    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+    //hook isr handler for specific gpio pin
+    gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
+}
+
 static void init_led() {
     gpio_config_t io_conf;
     //disable interrupt
@@ -223,12 +285,14 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         rsp.attr_value.value[3] = 0xef;
         esp_ble_gatts_send_response(gatts_if, param->read.conn_id, param->read.trans_id,
                                     ESP_GATT_OK, &rsp);
+        printf("gatts_if %d\n", gatts_if);
         break;
     }
     case ESP_GATTS_WRITE_EVT: {
         ESP_LOGI(GATTS_TAG, "GATT_WRITE_EVT, conn_id %d, trans_id %d, handle %d\n", param->write.conn_id, param->write.trans_id, param->write.handle);
         ESP_LOGI(GATTS_TAG, "GATT_WRITE_EVT, value len %d, value %08x\n", param->write.len, *(uint32_t *)param->write.value);
         esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
+        printf("gatts_if %d\n", gatts_if);
 
         if (1 == param->write.value[0]) {
           switch_led(true);
@@ -459,6 +523,7 @@ void app_main()
     esp_ble_gatts_app_register(PROFILE_B_APP_ID);
 
     init_led();
+    init_switch();
 
     return;
 }
