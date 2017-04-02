@@ -44,6 +44,7 @@
 
 #define ESP_INTR_FLAG_DEFAULT 0
 
+esp_gatt_if_t gatts_if_for_indicate = ESP_GATT_IF_NONE;
 static xQueueHandle gpio_evt_queue = NULL;
 
 static void IRAM_ATTR gpio_isr_handler(void* arg) {
@@ -160,12 +161,15 @@ static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
 // https://www.esp32.com/viewtopic.php?t=806
 // http://esp-idf.readthedocs.io/en/latest/api/bluetooth/esp_gatts.html?highlight=indicate
 static void ble_indicate(int value) {
-    esp_gatt_if_t gatts_if = 4; // I'm not sure to fix gatts_if as 4.
+    if (gatts_if_for_indicate == ESP_GATT_IF_NONE) {
+        printf("cannot indicate becaoute gatts_if_for_indicate is NONE\n");
+        return;
+    }
+    printf("indicate %d to %d\n", value, gatts_if_for_indicate);
     uint16_t attr_handle = 0x002a;
     uint8_t value_len = 1;
     uint8_t value_arr[] = {value};
-    printf("ble indicate %d\n", value);
-    esp_ble_gatts_send_indicate(gatts_if, 0, attr_handle, value_len, value_arr, false);
+    esp_ble_gatts_send_indicate(gatts_if_for_indicate, 0, attr_handle, value_len, value_arr, false);
 }
 
 static void gpio_task(void* arg) {
@@ -285,14 +289,12 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         rsp.attr_value.value[3] = 0xef;
         esp_ble_gatts_send_response(gatts_if, param->read.conn_id, param->read.trans_id,
                                     ESP_GATT_OK, &rsp);
-        printf("gatts_if %d\n", gatts_if);
         break;
     }
     case ESP_GATTS_WRITE_EVT: {
         ESP_LOGI(GATTS_TAG, "GATT_WRITE_EVT, conn_id %d, trans_id %d, handle %d\n", param->write.conn_id, param->write.trans_id, param->write.handle);
         ESP_LOGI(GATTS_TAG, "GATT_WRITE_EVT, value len %d, value %08x\n", param->write.len, *(uint32_t *)param->write.value);
         esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
-        printf("gatts_if %d\n", gatts_if);
 
         if (1 == param->write.value[0]) {
           switch_led(true);
@@ -359,6 +361,9 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
                  param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5],
                  param->connect.is_connected);
         gl_profile_tab[PROFILE_A_APP_ID].conn_id = param->connect.conn_id;
+        
+        gatts_if_for_indicate = gatts_if;
+        printf("set gatts_if_for_indicate %d\n", gatts_if);
         break;
     case ESP_GATTS_DISCONNECT_EVT:
         esp_ble_gap_start_advertising(&test_adv_params);
