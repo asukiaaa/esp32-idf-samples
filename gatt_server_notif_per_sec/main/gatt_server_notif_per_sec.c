@@ -146,7 +146,7 @@ static void ble_indicate(int value) {
         printf("cannot indicate becaoute gatts_if_for_indicate is NONE\n");
         return;
     }
-    printf("indicate %d to %d\n", value, gatts_if_for_indicate);
+    printf("indicate %d to gatts_if:%d\n", value, gatts_if_for_indicate);
     uint16_t attr_handle = 0x002a;
     uint8_t value_len = 1;
     uint8_t value_arr[] = {value};
@@ -274,12 +274,12 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         gl_profile_tab[PROFILE_A_APP_ID].conn_id = param->connect.conn_id;
 
         gatts_if_for_indicate = gatts_if;
-        printf("set %d for gatts_if_for_indicate %d\n", gatts_if);
+        printf("set %d for gatts_if_for_indicate\n", gatts_if);
         break;
     case ESP_GATTS_DISCONNECT_EVT:
+        esp_ble_gap_start_advertising(&test_adv_params);
         gatts_if_for_indicate = ESP_GATT_IF_NONE;
         printf("set NONE for gatts_if_for_indicate\n");
-        esp_ble_gap_start_advertising(&test_adv_params);
         break;
     case ESP_GATTS_OPEN_EVT:
     case ESP_GATTS_CANCEL_OPEN_EVT:
