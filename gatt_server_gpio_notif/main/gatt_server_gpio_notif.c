@@ -358,7 +358,7 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
                  param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5],
                  param->connect.is_connected);
         gl_profile_tab[PROFILE_A_APP_ID].conn_id = param->connect.conn_id;
-        
+
         gatts_if_for_indicate = gatts_if;
         printf("set gatts_if_for_indicate %d\n", gatts_if);
         break;
