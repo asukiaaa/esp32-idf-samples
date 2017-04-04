@@ -157,9 +157,6 @@ static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
     },
 };
 
-// reference
-// https://www.esp32.com/viewtopic.php?t=806
-// http://esp-idf.readthedocs.io/en/latest/api/bluetooth/esp_gatts.html?highlight=indicate
 static void ble_indicate(int value) {
     if (gatts_if_for_indicate == ESP_GATT_IF_NONE) {
         printf("cannot indicate becaoute gatts_if_for_indicate is NONE\n");
