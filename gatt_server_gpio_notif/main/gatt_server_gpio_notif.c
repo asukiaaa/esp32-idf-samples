@@ -190,6 +190,9 @@ static void init_switch() {
     io_conf.mode = GPIO_MODE_INPUT;
     //enable pull-up mode
     io_conf.pull_up_en = 1;
+    //disable pull-down mode
+    io_conf.pull_down_en = 0;
+    //configure
     gpio_config(&io_conf);
 
     //change gpio intrrupt type for one pin
