@@ -50,22 +50,11 @@ static void esp_gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
 static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 static void gattc_profile_b_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 
-static esp_gatt_srvc_id_t custom_service_id = {
-    .id = {
-        .uuid = {
-            .len = ESP_UUID_LEN_16,
-            .uuid = {.uuid16 = 0xff,},
-        },
-        .inst_id = 0,
-    },
-    .is_primary = true,
-};
-
 static esp_gatt_srvc_id_t alert_service_id = {
     .id = {
         .uuid = {
             .len = ESP_UUID_LEN_16,
-            .uuid = {.uuid16 = 0x1811,},
+            .uuid = {.uuid16 = 0xff,}, //origin: 0x1811
         },
         .inst_id = 0,
     },
@@ -195,7 +184,7 @@ static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
     case ESP_GATTC_SEARCH_CMPL_EVT:
         conn_id = p_data->search_cmpl.conn_id;
         ESP_LOGI(GATTC_TAG, "SEARCH_CMPL: conn_id = %x, status %d\n", conn_id, p_data->search_cmpl.status);
-        esp_ble_gattc_get_characteristic(gattc_if, conn_id, &custom_service_id, NULL);
+        esp_ble_gattc_get_characteristic(gattc_if, conn_id, &alert_service_id, NULL);
         break;
     case ESP_GATTC_GET_CHAR_EVT:
         printf("in get char evt\n");
