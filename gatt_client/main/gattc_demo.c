@@ -25,6 +25,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "controller.h"
+#include "esp_system.h"
 
 #include "bt.h"
 #include "bt_trace.h"
@@ -37,6 +38,10 @@
 #include "esp_gatt_defs.h"
 #include "esp_bt_main.h"
 
+#define GPIO_OUTPUT_IO_0    2 // for LED
+#define GPIO_OUTPUT_IO_1    19
+#define GPIO_OUTPUT_PIN_SEL  ((1<<GPIO_OUTPUT_IO_0) | (1<<GPIO_OUTPUT_IO_1))
+
 #define GATTC_TAG "GATTC_DEMO"
 
 ///Declare static functions
@@ -45,6 +50,16 @@ static void esp_gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
 static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 static void gattc_profile_b_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 
+static esp_gatt_srvc_id_t custom_service_id = {
+    .id = {
+        .uuid = {
+            .len = ESP_UUID_LEN_16,
+            .uuid = {.uuid16 = 0xff,},
+        },
+        .inst_id = 0,
+    },
+    .is_primary = true,
+};
 
 static esp_gatt_srvc_id_t alert_service_id = {
     .id = {
@@ -57,6 +72,8 @@ static esp_gatt_srvc_id_t alert_service_id = {
     .is_primary = true,
 };
 
+static uint16_t listen_char_id = 0xff01;
+
 static esp_gatt_id_t notify_descr_id = {
     .uuid = {
         .len = ESP_UUID_LEN_16,
@@ -68,7 +85,7 @@ static esp_gatt_id_t notify_descr_id = {
 #define BT_BD_ADDR_HEX(addr)   addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]
 
 static bool connect = false;
-static const char device_name[] = "Alert Notification";
+static const char device_name[] = "ESP_GATTS_SWITCH"; //origin: "Alert Notification"
 
 static esp_ble_scan_params_t ble_scan_params = {
     .scan_type              = BLE_SCAN_TYPE_ACTIVE,
@@ -103,11 +120,39 @@ static struct gattc_profile_inst gl_profile_tab[PROFILE_NUM] = {
     },
 };
 
+static void init_led() {
+    gpio_config_t io_conf;
+    //disable interrupt
+    io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+    //set as output mode
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    //bit mask of the pins that you want to set
+    io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
+    //disable pull-down mode
+    io_conf.pull_down_en = 0;
+    //disable pull-up mode
+    io_conf.pull_up_en = 0;
+    //configure GPIO with the given settings
+    gpio_config(&io_conf);
+
+    printf("led initlalized");
+}
+
+static void switch_led(bool value) {
+    int out_value = 0;
+    if (value) {
+        out_value = 1;
+    }
+    printf("out value %d\n", out_value);
+    gpio_set_level(GPIO_OUTPUT_IO_0, out_value);
+}
+
 static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param)
 {
     uint16_t conn_id = 0;
     esp_ble_gattc_cb_param_t *p_data = (esp_ble_gattc_cb_param_t *)param;
-
+    printf("gattc_profile_a_event %d\n", event);
+    printf("GET_CHAR_EVT %d\n", ESP_GATTC_GET_CHAR_EVT);
     switch (event) {
     case ESP_GATTC_REG_EVT:
         ESP_LOGI(GATTC_TAG, "REG_EVT\n");
@@ -150,16 +195,18 @@ static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
     case ESP_GATTC_SEARCH_CMPL_EVT:
         conn_id = p_data->search_cmpl.conn_id;
         ESP_LOGI(GATTC_TAG, "SEARCH_CMPL: conn_id = %x, status %d\n", conn_id, p_data->search_cmpl.status);
-        esp_ble_gattc_get_characteristic(gattc_if, conn_id, &alert_service_id, NULL);
+        esp_ble_gattc_get_characteristic(gattc_if, conn_id, &custom_service_id, NULL);
         break;
     case ESP_GATTC_GET_CHAR_EVT:
+        printf("in get char evt\n");
         if (p_data->get_char.status != ESP_GATT_OK) {
+            printf("status is not OK\n");
             break;
         }
         ESP_LOGI(GATTC_TAG, "GET CHAR: conn_id = %x, status %d\n", p_data->get_char.conn_id, p_data->get_char.status);
         ESP_LOGI(GATTC_TAG, "GET CHAR: srvc_id = %04x, char_id = %04x\n", p_data->get_char.srvc_id.id.uuid.uuid.uuid16, p_data->get_char.char_id.uuid.uuid.uuid16);
 
-        if (p_data->get_char.char_id.uuid.uuid.uuid16 == 0x2a46) {
+        if (p_data->get_char.char_id.uuid.uuid.uuid16 == listen_char_id ) { //origin: 0x2a46
             ESP_LOGI(GATTC_TAG, "register notify\n");
             esp_ble_gattc_register_for_notify(gattc_if, gl_profile_tab[PROFILE_A_APP_ID].remote_bda, &alert_service_id, &p_data->get_char.char_id);
         }
@@ -185,6 +232,7 @@ static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
     }
     case ESP_GATTC_NOTIFY_EVT:
         ESP_LOGI(GATTC_TAG, "NOTIFY: len %d, value %08x\n", p_data->notify.value_len, *(uint32_t *)p_data->notify.value);
+        switch_led(0 == (*(uint32_t *)p_data->notify.value % 2));
         break;
     case ESP_GATTC_WRITE_DESCR_EVT:
         ESP_LOGI(GATTC_TAG, "WRITE: status %d\n", p_data->write.status);
@@ -196,6 +244,7 @@ static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
 
 static void gattc_profile_b_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param)
 {
+    printf("gattc_profile_b_event %d\n", event);
     uint16_t conn_id = 0;
     esp_ble_gattc_cb_param_t *p_data = (esp_ble_gattc_cb_param_t *)param;
 
@@ -286,38 +335,55 @@ static void gattc_profile_b_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
 
 static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
-    uint8_t *adv_name = NULL;
-    uint8_t adv_name_len = 0;
+    printf("esp_gap_cb\n");
     switch (event) {
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT: {
+        printf("ble scan param set completed\n");
         //the unit of the duration is second
         uint32_t duration = 10;
         esp_ble_gap_start_scanning(duration);
         break;
     }
     case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
+        printf("start ble scan\n");
         //scan start complete event to indicate scan start successfully or failed
         if (param->scan_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
             ESP_LOGE(GATTC_TAG, "Scan start failed\n");
         }
         break;
     case ESP_GAP_BLE_SCAN_RESULT_EVT: {
+        printf("ble scan result\n");
+        uint8_t *adv_name = NULL;
+        uint8_t adv_name_len = 0;
+        char adv_name_chars[255];
         esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
         switch (scan_result->scan_rst.search_evt) {
         case ESP_GAP_SEARCH_INQ_RES_EVT:
+            printf("gap search inq res\n");
+            printf("scan rst bda: ");
             for (int i = 0; i < 6; i++) {
-                ESP_LOGI(GATTC_TAG, "%x:", scan_result->scan_rst.bda[i]);
+                //ESP_LOGI(GATTC_TAG, "%x:", scan_result->scan_rst.bda[i]);
+                printf("%02x ", scan_result->scan_rst.bda[i]);
             }
-            ESP_LOGI(GATTC_TAG, "\n");
+            // ESP_LOGI(GATTC_TAG, "\n");
+            printf("\n");
             adv_name = esp_ble_resolve_adv_data(scan_result->scan_rst.ble_adv,
                                                 ESP_BLE_AD_TYPE_NAME_CMPL, &adv_name_len);
-            ESP_LOGI(GATTC_TAG, "Searched Device Name Len %d\n", adv_name_len);
+            ESP_LOGI(GATTC_TAG, "Searched Device Name Len %d", adv_name_len);
             for (int j = 0; j < adv_name_len; j++) {
-                ESP_LOGI(GATTC_TAG, "%c", adv_name[j]);
+                //ESP_LOGI(GATTC_TAG, "%c", adv_name[j]);
+                printf("%c", adv_name[j]);
+                adv_name_chars[j] = adv_name[j];
             }
+            printf("\n");
+            adv_name_chars[adv_name_len] = '\0';
 
+            printf("adv_name check\n");
             if (adv_name != NULL) {
-                if (strcmp((char *)adv_name, device_name) == 0) {
+                printf("adv_name is not null\n");
+                printf("compare %s and %s is same?\n", adv_name_chars, device_name);
+                printf("result: %d\n", strcmp(adv_name_chars, device_name));
+                if (strcmp(adv_name_chars, device_name) == 0) {
                     ESP_LOGI(GATTC_TAG, "Searched device %s\n", device_name);
                     if (connect == false) {
                         connect = true;
@@ -330,10 +396,12 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             }
             break;
         case ESP_GAP_SEARCH_INQ_CMPL_EVT:
+            printf("gap search inq compl\n");
             break;
         default:
             break;
         }
+        printf("break ble scan result\n\n");
         break;
     }
     default:
@@ -343,6 +411,7 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
 
 static void esp_gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param)
 {
+    printf("esp_gatt_cb\n");
     ESP_LOGI(GATTC_TAG, "EVT %d, gattc if %d\n", event, gattc_if);
 
     /* If event is register event, store the gattc_if for each profile */
@@ -406,5 +475,6 @@ void app_main()
     esp_bt_controller_enable(ESP_BT_MODE_BTDM);
 
     gattc_client_test();
+    init_led();
 }
 
