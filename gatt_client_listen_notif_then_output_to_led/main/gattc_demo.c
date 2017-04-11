@@ -324,6 +324,8 @@ static void gattc_profile_b_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
 
 static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
+    uint8_t *adv_name = NULL;
+    uint8_t adv_name_len = 0;
     printf("esp_gap_cb\n");
     switch (event) {
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT: {
@@ -342,9 +344,6 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         break;
     case ESP_GAP_BLE_SCAN_RESULT_EVT: {
         printf("ble scan result\n");
-        uint8_t *adv_name = NULL;
-        uint8_t adv_name_len = 0;
-        char adv_name_chars[255];
         esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
         switch (scan_result->scan_rst.search_evt) {
         case ESP_GAP_SEARCH_INQ_RES_EVT:
@@ -362,17 +361,13 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             for (int j = 0; j < adv_name_len; j++) {
                 //ESP_LOGI(GATTC_TAG, "%c", adv_name[j]);
                 printf("%c", adv_name[j]);
-                adv_name_chars[j] = adv_name[j];
             }
             printf("\n");
-            adv_name_chars[adv_name_len] = '\0';
 
             printf("adv_name check\n");
             if (adv_name != NULL) {
                 printf("adv_name is not null\n");
-                printf("compare %s and %s is same?\n", adv_name_chars, device_name);
-                printf("result: %d\n", strcmp(adv_name_chars, device_name));
-                if (strcmp(adv_name_chars, device_name) == 0) {
+                if (strncmp((char *)adv_name, device_name, adv_name_len) == 0) {
                     ESP_LOGI(GATTC_TAG, "Searched device %s\n", device_name);
                     if (connect == false) {
                         connect = true;
