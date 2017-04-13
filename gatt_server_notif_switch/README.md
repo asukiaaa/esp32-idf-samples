@@ -4,7 +4,8 @@ A sample program for ESP32 on esp-idf. This program send notification by push or
 # Partner program
 The following nodejs program can listen notice from this project.
 
-[esp32-nodejs-samples/listen-notification.js](https://github.com/asukiaaa/esp32-nodejs-samples/blob/master/listen-notification.js)
+- [esp32-nodejs-samples/listen-notification.js](https://github.com/asukiaaa/esp32-nodejs-samples/blob/master/listen-notification.js)
+- [gatt_client_listen_notif_then_output_to_led](../gatt_client_listen_notif_then_output_to_led)
 
 # License
 Appache v2
