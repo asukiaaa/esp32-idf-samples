@@ -18,6 +18,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "driver/ledc.h"
 #include "esp_system.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -34,13 +35,26 @@
 
 #define GATTS_TAG "GATTS_DEMO"
 
-#define GPIO_OUTPUT_IO_0    5
-#define GPIO_OUTPUT_IO_1    19
-#define GPIO_OUTPUT_PIN_SEL  ((1<<GPIO_OUTPUT_IO_0) | (1<<GPIO_OUTPUT_IO_1))
+// #define GPIO_OUTPUT_IO_0    5
+// #define GPIO_OUTPUT_IO_1    19
+// #define GPIO_OUTPUT_PIN_SEL  ((1<<GPIO_OUTPUT_IO_0) | (1<<GPIO_OUTPUT_IO_1))
 
 #define GPIO_INPUT_IO_0     0
 #define GPIO_INPUT_IO_1     18
 #define GPIO_INPUT_PIN_SEL  ((1<<GPIO_INPUT_IO_0) | (1<<GPIO_INPUT_IO_1))
+
+
+#define MOTOR_PWM_TIMER             LEDC_TIMER_0
+#define MOTOR_PWM_SPEED_MODE        LEDC_HIGH_SPEED_MODE
+#define MOTOR_PWM_BIT_NUM           LEDC_TIMER_10_BIT
+#define MOTOR_LEFT_FORWARD_PIN      19
+#define MOTOR_LEFT_FORWARD_CHANNEL  LEDC_CHANNEL_0
+#define MOTOR_LEFT_BACK_PIN         21
+#define MOTOR_LEFT_BACK_CHANNEL     LEDC_CHANNEL_1
+#define MOTOR_RIGHT_FORWARD_PIN     22
+#define MOTOR_RIGHT_FORWARD_CHANNEL LEDC_CHANNEL_2
+#define MOTOR_RIGHT_BACK_PIN        23
+#define MOTOR_RIGHT_BACK_CHANNEL    LEDC_CHANNEL_3
 
 #define ESP_INTR_FLAG_DEFAULT 0
 
@@ -66,7 +80,7 @@ static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 #define GATTS_DESCR_UUID_TEST_B     0x2222
 #define GATTS_NUM_HANDLE_TEST_B     4
 
-#define TEST_DEVICE_NAME            "ESP_GATTS_LED"
+#define TEST_DEVICE_NAME            "ESP_GATTS_CAR"
 #define TEST_MANUFACTURER_DATA_LEN  17
 
 #define GATTS_DEMO_CHAR_VAL_LEN_MAX 0x40
@@ -180,6 +194,26 @@ static void gpio_task(void* arg) {
     }
 }
 
+static void init_motors() {
+    ledc_channel_config_t motor_lf = {
+        .gpio_num   = MOTOR_LEFT_FORWARD_PIN,
+        .speed_mode = MOTOR_PWM_SPEED_MODE,
+        .channel    = MOTOR_LEFT_FORWARD_CHANNEL,
+        .intr_type  = LEDC_INTR_DISABLE,
+        .timer_sel  = MOTOR_PWM_TIMER,
+        .duty       = 0,
+    };
+    ledc_channel_config(&motor_lf);
+
+    ledc_timer_config_t motor_timer = {
+        .speed_mode = MOTOR_PWM_SPEED_MODE,
+        .bit_num    = MOTOR_PWM_BIT_NUM,
+        .timer_num  = MOTOR_PWM_TIMER,
+        .freq_hz    = 25000,
+    };
+    ledc_timer_config(&motor_timer);
+}
+
 static void init_switch() {
     gpio_config_t io_conf;
     //interrupt of rising edge
@@ -209,31 +243,62 @@ static void init_switch() {
     gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
 }
 
-static void init_led() {
-    gpio_config_t io_conf;
-    //disable interrupt
-    io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
-    //set as output mode
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    //bit mask of the pins that you want to set
-    io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
-    //disable pull-down mode
-    io_conf.pull_down_en = 0;
-    //disable pull-up mode
-    io_conf.pull_up_en = 0;
-    //configure GPIO with the given settings
-    gpio_config(&io_conf);
+// static void init_led() {
+//     gpio_config_t io_conf;
+//     //disable interrupt
+//     io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+//     //set as output mode
+//     io_conf.mode = GPIO_MODE_OUTPUT;
+//     //bit mask of the pins that you want to set
+//     io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
+//     //disable pull-down mode
+//     io_conf.pull_down_en = 0;
+//     //disable pull-up mode
+//     io_conf.pull_up_en = 0;
+//     //configure GPIO with the given settings
+//     gpio_config(&io_conf);
+//
+//     printf("led initlalized");
+// }
 
-    printf("led initlalized");
+// static void switch_led(bool value) {
+//     int out_value = 0;
+//     if (value) {
+//         out_value = 1;
+//     }
+//     printf("out value %d\n", out_value);
+//     gpio_set_level(GPIO_OUTPUT_IO_0, out_value);
+// }
+
+static void set_and_update_duty(uint8_t channel, uint8_t value) {
+    uint32_t value_for_duty = (((uint32_t) value + 1) * 4) - 1; // expand value for 10bit
+    printf("value: %d %d\n", value, value_for_duty);
+    ledc_set_duty(MOTOR_PWM_SPEED_MODE, channel, value_for_duty);
+    ledc_update_duty(MOTOR_PWM_SPEED_MODE, channel);
 }
 
-static void switch_led(bool value) {
-    int out_value = 0;
-    if (value) {
-        out_value = 1;
+static void set_speed_for_a_motor(uint8_t forward_channel, uint8_t forward_value, uint8_t back_channel, uint8_t back_value) {
+    printf("values %d: %d; %d: %d;\n", forward_channel, forward_value, back_channel, back_value);
+    if (forward_value < back_value) {
+        back_value = back_value - forward_value;
+        forward_value = 0;
+    } else {
+        forward_value = forward_value - back_value;
+        back_value = 0;
     }
-    printf("out value %d\n", out_value);
-    gpio_set_level(GPIO_OUTPUT_IO_0, out_value);
+    printf("set duty %d: %d; %d: %d;\n", forward_channel, forward_value, back_channel, back_value);
+    set_and_update_duty(forward_channel, forward_value);
+    set_and_update_duty(back_channel, back_value);
+}
+
+static void set_speed(uint8_t left_forward, uint8_t left_back, uint8_t right_forward, uint8_t right_back) {
+    set_speed_for_a_motor(MOTOR_LEFT_FORWARD_CHANNEL, left_forward,
+                          MOTOR_LEFT_BACK_CHANNEL, left_back);
+    set_speed_for_a_motor(MOTOR_RIGHT_FORWARD_CHANNEL, right_forward,
+                          MOTOR_RIGHT_BACK_CHANNEL, right_back);
+    // if (left_forward != 0 && left_back != 0 && right_forward != 0  && right_back != 0) {
+    //   last_moved_time = time();
+    // }
 }
 
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
@@ -296,11 +361,10 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         ESP_LOGI(GATTS_TAG, "GATT_WRITE_EVT, value len %d, value %08x\n", param->write.len, *(uint32_t *)param->write.value);
         esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
 
-        if (1 == param->write.value[0]) {
-          switch_led(true);
-        } else {
-          switch_led(false);
-        }
+        set_speed(param->write.value[0],
+                  param->write.value[1],
+                  param->write.value[2],
+                  param->write.value[3]);
         break;
     }
     case ESP_GATTS_EXEC_WRITE_EVT:
@@ -527,8 +591,9 @@ void app_main()
     esp_ble_gatts_app_register(PROFILE_A_APP_ID);
     esp_ble_gatts_app_register(PROFILE_B_APP_ID);
 
-    init_led();
+    //init_led();
     init_switch();
+    init_motors();
 
     return;
 }
