@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -84,6 +85,8 @@ static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 #define TEST_MANUFACTURER_DATA_LEN  17
 
 #define GATTS_DEMO_CHAR_VAL_LEN_MAX 0x40
+
+uint32_t last_moved_millis;
 
 uint8_t char1_str[] = {0x11,0x22,0x33};
 esp_attr_value_t gatts_demo_char1_val =
@@ -170,6 +173,10 @@ static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
         .gatts_if = ESP_GATT_IF_NONE,       /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
     },
 };
+
+uint32_t get_millis() {
+    return (uint32_t) (clock() * 1000 / CLOCKS_PER_SEC);
+}
 
 static void ble_indicate(int value) {
     if (gatts_if_for_indicate == ESP_GATT_IF_NONE) {
@@ -296,9 +303,10 @@ static void set_speed(uint8_t left_forward, uint8_t left_back, uint8_t right_for
                           MOTOR_LEFT_BACK_CHANNEL, left_back);
     set_speed_for_a_motor(MOTOR_RIGHT_FORWARD_CHANNEL, right_forward,
                           MOTOR_RIGHT_BACK_CHANNEL, right_back);
-    // if (left_forward != 0 && left_back != 0 && right_forward != 0  && right_back != 0) {
-    //   last_moved_time = time();
-    // }
+    if (left_forward != 0 || left_back != 0 || right_forward != 0  || right_back != 0) {
+        last_moved_millis = get_millis();
+        printf("set last_moved_milllis: %d\n", last_moved_millis);
+    }
 }
 
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
