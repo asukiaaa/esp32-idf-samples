@@ -38,17 +38,33 @@
 #include "esp_gatt_defs.h"
 #include "esp_bt_main.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "driver/gpio.h"
+#include "driver/adc.h"
+
 #define GPIO_OUTPUT_IO_0    2 // for LED
 #define GPIO_OUTPUT_IO_1    19
 #define GPIO_OUTPUT_PIN_SEL  ((1<<GPIO_OUTPUT_IO_0) | (1<<GPIO_OUTPUT_IO_1))
 
 #define GATTC_TAG "GATTC_DEMO"
 
+#define ADC_CHAN_CONTROLLER_FB 6 // channel 6 is gpio 34
+#define ADC_CHAN_CONTROLLER_LR 7 // channel 7 is gpio 35
+
+#define max(a,b)            (((a) > (b)) ? (a) : (b))
+#define min(a,b)            (((a) < (b)) ? (a) : (b))
+#define minmax(a,b,x)       (((x) > (b)) ? (b) : (((x) < (a)) ? (a) : (x)))
+
 ///Declare static functions
 static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);
 static void esp_gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 static void gattc_profile_b_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
+
+esp_gatt_if_t gattc_if_to_write = ESP_GATT_IF_NONE;
+uint16_t conn_id_to_write;
 
 static esp_gatt_srvc_id_t alert_service_id = {
     .id = {
@@ -74,7 +90,7 @@ static esp_gatt_id_t notify_descr_id = {
 #define BT_BD_ADDR_HEX(addr)   addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]
 
 static bool connect = false;
-static const char device_name[] = "ESP_GATTS_SWITCH"; //origin: "Alert Notification"
+static const char device_name[] = "ESP_GATTS_CAR"; //origin: "Alert Notification"
 
 static esp_ble_scan_params_t ble_scan_params = {
     .scan_type              = BLE_SCAN_TYPE_ACTIVE,
@@ -183,6 +199,8 @@ static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
     }
     case ESP_GATTC_SEARCH_CMPL_EVT:
         conn_id = p_data->search_cmpl.conn_id;
+        conn_id_to_write = conn_id;
+        gattc_if_to_write = gattc_if;
         ESP_LOGI(GATTC_TAG, "SEARCH_CMPL: conn_id = %x, status %d\n", conn_id, p_data->search_cmpl.status);
         esp_ble_gattc_get_characteristic(gattc_if, conn_id, &alert_service_id, NULL);
         break;
@@ -453,6 +471,92 @@ void gattc_client_test(void)
     ble_client_appRegister();
 }
 
+void init_adc() {
+    adc1_config_width(ADC_WIDTH_12Bit);
+    adc1_config_channel_atten(ADC_CHAN_CONTROLLER_FB, ADC_ATTEN_11db);
+    adc1_config_channel_atten(ADC_CHAN_CONTROLLER_LR, ADC_ATTEN_11db);
+}
+
+uint16_t get_top_value_from_center (uint16_t input_value, uint16_t center_value, uint16_t buffer_value) {
+    if (input_value > (center_value + buffer_value)) {
+        return ((input_value - center_value) / 7);
+    } else {
+        return 0;
+    }
+};
+
+uint16_t get_bottom_value_from_center (uint16_t input_value, uint16_t center_value, uint16_t buffer_value) {
+    if (input_value < (center_value - buffer_value)) {
+        return ((center_value - input_value) / 7);
+    } else {
+        return 0;
+    }
+};
+
+uint16_t fb_value;
+uint16_t lr_value;
+uint16_t f_value;
+uint16_t b_value;
+uint16_t r_value;
+uint16_t l_value;
+uint16_t center_value = 1850;
+uint16_t center_buffer = 400;
+
+uint8_t lf_value;
+uint8_t lb_value;
+uint8_t rf_value;
+uint8_t rb_value;
+
+void send_by_controller_input() {
+    fb_value = adc1_get_voltage(ADC_CHAN_CONTROLLER_FB);
+    lr_value = adc1_get_voltage(ADC_CHAN_CONTROLLER_LR);
+
+    f_value = get_bottom_value_from_center(fb_value, center_value, center_buffer);
+    b_value = get_top_value_from_center(fb_value, center_value, center_buffer);
+    l_value = get_top_value_from_center(lr_value, center_value, center_buffer);
+    r_value = get_bottom_value_from_center(lr_value, center_value, center_buffer);
+
+    // printf("FB: %d\nF: %d\nB: %d\n", fb_value, f_value, b_value);
+    // printf("LR: %d\nL: %d\nR: %d\n", lr_value, l_value, r_value);
+
+    if (f_value > 0) {
+        lf_value = (uint8_t) minmax(0,255,f_value - l_value);
+        lb_value = 0;
+        rf_value = (uint8_t) minmax(0,255,f_value - r_value);
+        rb_value = 0;
+    } else if (b_value > 0) {
+        lf_value = 0;
+        lb_value = (uint8_t) minmax(0,255,b_value - l_value);
+        rf_value = 0;
+        rb_value = (uint8_t) minmax(0,255,b_value - r_value);
+    } else {
+        lf_value = 0;
+        lb_value = 0;
+        rf_value = 0;
+        rb_value = 0;
+    }
+
+    // printf("lf: %03d, rf: %03d\n", lf_value, rf_value);
+    // printf("lb: %03d, rb: %03d\n", lb_value, rb_value);
+
+    uint8_t sending_values[] = {lf_value, lb_value, rf_value, rb_value};
+
+    if (gattc_if_to_write != ESP_GATT_IF_NONE) {
+        printf("send to gattc_if: %d\n", gattc_if_to_write);
+        esp_ble_gattc_write_char(
+                gattc_if_to_write,
+                conn_id_to_write,
+                &alert_service_id,
+                &notify_descr_id,
+                sizeof(sending_values),
+                (uint8_t *) sending_values,
+                ESP_GATT_WRITE_TYPE_RSP,
+                ESP_GATT_AUTH_REQ_NONE);
+    } else {
+        printf("gatt_if is not connected\n");
+    }
+}
+
 void app_main()
 {
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
@@ -461,5 +565,11 @@ void app_main()
 
     gattc_client_test();
     init_led();
+    init_adc();
+
+    while(1) {
+        send_by_controller_input();
+        vTaskDelay(100/portTICK_PERIOD_MS);
+    }
 }
 
