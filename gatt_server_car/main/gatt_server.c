@@ -180,7 +180,7 @@ uint32_t get_millis() {
 
 static void ble_indicate(int value) {
     if (gatts_if_for_indicate == ESP_GATT_IF_NONE) {
-        printf("cannot indicate becaoute gatts_if_for_indicate is NONE\n");
+        printf("cannot indicate because gatts_if_for_indicate is NONE\n");
         return;
     }
     printf("indicate %d to %d\n", value, gatts_if_for_indicate);
@@ -293,7 +293,7 @@ static void set_speed_for_a_motor(uint8_t forward_channel, uint8_t forward_value
         forward_value = forward_value - back_value;
         back_value = 0;
     }
-    printf("set duty %d: %d; %d: %d;\n", forward_channel, forward_value, back_channel, back_value);
+    //printf("set duty %d: %d; %d: %d;\n", forward_channel, forward_value, back_channel, back_value);
     set_and_update_duty(forward_channel, forward_value);
     set_and_update_duty(back_channel, back_value);
 }
