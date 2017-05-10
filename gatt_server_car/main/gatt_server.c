@@ -44,7 +44,6 @@
 #define GPIO_INPUT_IO_1     18
 #define GPIO_INPUT_PIN_SEL  ((1<<GPIO_INPUT_IO_0) | (1<<GPIO_INPUT_IO_1))
 
-
 #define MOTOR_PWM_TIMER             LEDC_TIMER_0
 #define MOTOR_PWM_SPEED_MODE        LEDC_HIGH_SPEED_MODE
 #define MOTOR_PWM_BIT_NUM           LEDC_TIMER_10_BIT
@@ -201,16 +200,44 @@ static void gpio_task(void* arg) {
     }
 }
 
+typedef struct {
+  int gpio_num;
+  int channel;
+} pin_info_t;
+
 static void init_motors() {
-    ledc_channel_config_t motor_lf = {
-        .gpio_num   = MOTOR_LEFT_FORWARD_PIN,
+
+    int ch;
+    pin_info_t motor_pins_info[] = {
+        {
+            .gpio_num = MOTOR_LEFT_FORWARD_PIN,
+            .channel  = MOTOR_LEFT_FORWARD_CHANNEL,
+        },
+        {
+            .gpio_num = MOTOR_LEFT_BACK_PIN,
+            .channel  = MOTOR_LEFT_BACK_CHANNEL,
+        },
+        {
+            .gpio_num = MOTOR_RIGHT_FORWARD_PIN,
+            .channel  = MOTOR_RIGHT_FORWARD_CHANNEL,
+        },
+        {
+            .gpio_num = MOTOR_RIGHT_BACK_PIN,
+            .channel  = MOTOR_RIGHT_BACK_CHANNEL,
+        }
+    };
+
+    ledc_channel_config_t channel_config = {
         .speed_mode = MOTOR_PWM_SPEED_MODE,
-        .channel    = MOTOR_LEFT_FORWARD_CHANNEL,
         .intr_type  = LEDC_INTR_DISABLE,
         .timer_sel  = MOTOR_PWM_TIMER,
         .duty       = 0,
     };
-    ledc_channel_config(&motor_lf);
+    for (ch=0; ch<4; ch++) {
+        channel_config.gpio_num = motor_pins_info[ch].gpio_num;
+        channel_config.channel  = motor_pins_info[ch].channel;
+        ledc_channel_config(&channel_config);
+    }
 
     ledc_timer_config_t motor_timer = {
         .speed_mode = MOTOR_PWM_SPEED_MODE,
@@ -278,14 +305,19 @@ static void init_switch() {
 // }
 
 static void set_and_update_duty(uint8_t channel, uint8_t value) {
-    uint32_t value_for_duty = (((uint32_t) value + 1) * 4) - 1; // expand value for 10bit
-    printf("value: %d %d\n", value, value_for_duty);
+    uint32_t value_for_duty;
+    if (value == 0) {
+        value_for_duty = 0;
+    } else {
+        value_for_duty = (((uint32_t) value + 1) * 4) - 1; // expand value for 10bit
+    }
+    printf("c: %03d, v: %03d, d: %04d\n", channel, value, value_for_duty);
     ledc_set_duty(MOTOR_PWM_SPEED_MODE, channel, value_for_duty);
     ledc_update_duty(MOTOR_PWM_SPEED_MODE, channel);
 }
 
 static void set_speed_for_a_motor(uint8_t forward_channel, uint8_t forward_value, uint8_t back_channel, uint8_t back_value) {
-    printf("values %d: %d; %d: %d;\n", forward_channel, forward_value, back_channel, back_value);
+    // printf("values %d: %d; %d: %d;\n", forward_channel, forward_value, back_channel, back_value);
     if (forward_value < back_value) {
         back_value = back_value - forward_value;
         forward_value = 0;
