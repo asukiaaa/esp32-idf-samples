@@ -65,6 +65,8 @@ static void gattc_profile_b_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
 
 esp_gatt_if_t gattc_if_to_write = ESP_GATT_IF_NONE;
 uint16_t conn_id_to_write;
+esp_gatt_srvc_id_t srvc_id_to_write;
+esp_gatt_id_t descr_id_to_write;
 
 static esp_gatt_srvc_id_t alert_service_id = {
     .id = {
@@ -78,6 +80,14 @@ static esp_gatt_srvc_id_t alert_service_id = {
 };
 
 static uint16_t listen_char_id = 0xff01;
+
+static esp_gatt_id_t write_descr_id = {
+    .uuid = {
+        .len = ESP_UUID_LEN_16,
+        .uuid = {.uuid16 = 0xff01,},
+    },
+    .inst_id = 0,
+};
 
 static esp_gatt_id_t notify_descr_id = {
     .uuid = {
@@ -199,8 +209,6 @@ static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
     }
     case ESP_GATTC_SEARCH_CMPL_EVT:
         conn_id = p_data->search_cmpl.conn_id;
-        conn_id_to_write = conn_id;
-        gattc_if_to_write = gattc_if;
         ESP_LOGI(GATTC_TAG, "SEARCH_CMPL: conn_id = %x, status %d\n", conn_id, p_data->search_cmpl.status);
         esp_ble_gattc_get_characteristic(gattc_if, conn_id, &alert_service_id, NULL);
         break;
@@ -214,6 +222,10 @@ static void gattc_profile_a_event_handler(esp_gattc_cb_event_t event, esp_gatt_i
         ESP_LOGI(GATTC_TAG, "GET CHAR: srvc_id = %04x, char_id = %04x\n", p_data->get_char.srvc_id.id.uuid.uuid.uuid16, p_data->get_char.char_id.uuid.uuid.uuid16);
 
         if (p_data->get_char.char_id.uuid.uuid.uuid16 == listen_char_id ) { //origin: 0x2a46
+            conn_id_to_write = conn_id;
+            gattc_if_to_write = gattc_if;
+            srvc_id_to_write = p_data->get_char.srvc_id;
+            descr_id_to_write = p_data->reg_for_notify.char_id;
             ESP_LOGI(GATTC_TAG, "register notify\n");
             esp_ble_gattc_register_for_notify(gattc_if, gl_profile_tab[PROFILE_A_APP_ID].remote_bda, &alert_service_id, &p_data->get_char.char_id);
         }
@@ -546,8 +558,8 @@ void send_by_controller_input() {
         esp_ble_gattc_write_char(
                 gattc_if_to_write,
                 conn_id_to_write,
-                &alert_service_id,
-                &notify_descr_id,
+                &srvc_id_to_write,
+                &write_descr_id,
                 sizeof(sending_values),
                 (uint8_t *) sending_values,
                 ESP_GATT_WRITE_TYPE_RSP,
