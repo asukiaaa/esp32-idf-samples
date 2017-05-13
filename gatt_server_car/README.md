@@ -1,6 +1,9 @@
 # gatt_server_car
 A project for car that can controll over BLE GATT connection.
 
+# Pair project
+- [gatt_client_car_controller](/gatt_client_car_controller)
+
 # References
 - [LED-PWM example for a beginner?](https://www.esp32.com/viewtopic.php?f=13&t=821)
 - [esp-idf/examples/peripherals/ledc/main/ledc_example_main.c](https://github.com/espressif/esp-idf/blob/master/examples/peripherals/ledc/main/ledc_example_main.c)
