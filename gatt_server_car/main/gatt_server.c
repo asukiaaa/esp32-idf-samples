@@ -85,6 +85,7 @@ static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 
 #define GATTS_DEMO_CHAR_VAL_LEN_MAX 0x40
 
+bool is_moving = false;
 uint32_t last_moved_millis;
 
 uint8_t char1_str[] = {0x11,0x22,0x33};
@@ -335,7 +336,10 @@ static void set_speed(uint8_t left_forward, uint8_t left_back, uint8_t right_for
                           MOTOR_LEFT_BACK_CHANNEL, left_back);
     set_speed_for_a_motor(MOTOR_RIGHT_FORWARD_CHANNEL, right_forward,
                           MOTOR_RIGHT_BACK_CHANNEL, right_back);
-    if (left_forward != 0 || left_back != 0 || right_forward != 0  || right_back != 0) {
+    if (left_forward == 0 && left_back == 0 && right_forward == 0 && right_back == 0) {
+        is_moving = false;
+    } else {
+        is_moving = true;
         last_moved_millis = get_millis();
         printf("set last_moved_milllis: %d\n", last_moved_millis);
     }
@@ -636,5 +640,13 @@ void app_main()
     init_switch();
     init_motors();
 
+    uint32_t  current_millis;
+    while (1) {
+        vTaskDelay(200 / portTICK_RATE_MS);
+        current_millis = get_millis();
+        if (is_moving && current_millis - last_moved_millis > 1000) {
+            set_speed(0,0,0,0);
+        }
+    }
     return;
 }
