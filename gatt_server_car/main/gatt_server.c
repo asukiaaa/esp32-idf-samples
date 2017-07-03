@@ -345,6 +345,23 @@ static void set_speed(uint8_t left_forward, uint8_t left_back, uint8_t right_for
     }
 }
 
+static void convert_fb_speed(uint8_t speed, uint8_t* f_speed, uint8_t* b_speed) {
+    if (speed < 128) {
+        *f_speed = 0;
+        *b_speed = (uint8_t) (((uint16_t) speed * 2) - 256);
+    } else {
+        *f_speed = (uint8_t) ((uint16_t) 255 - (speed * 2));
+        *b_speed = 0;
+    }
+}
+
+static void set_speed_with_2byte(uint8_t left, uint8_t right) {
+    uint8_t lf, lb, rf, rb;
+    convert_fb_speed(left, &lf, &lb);
+    convert_fb_speed(right, &rf, &rb);
+    set_speed(lf, lb, rf, rb);
+}
+
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
     switch (event) {
@@ -404,11 +421,15 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         ESP_LOGI(GATTS_TAG, "GATT_WRITE_EVT, conn_id %d, trans_id %d, handle %d\n", param->write.conn_id, param->write.trans_id, param->write.handle);
         ESP_LOGI(GATTS_TAG, "GATT_WRITE_EVT, value len %d, value %08x\n", param->write.len, *(uint32_t *)param->write.value);
         esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
-
-        set_speed(param->write.value[0],
-                  param->write.value[1],
-                  param->write.value[2],
-                  param->write.value[3]);
+        if (param->write.len == 4) {
+            set_speed(param->write.value[0],
+                      param->write.value[1],
+                      param->write.value[2],
+                      param->write.value[3]);
+        } else if (param->write.len == 2) {
+            set_speed_with_2byte(param->write.value[0],
+                                 param->write.value[1]);
+        }
         break;
     }
     case ESP_GATTS_EXEC_WRITE_EVT:
