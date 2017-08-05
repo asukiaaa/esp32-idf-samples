@@ -34,6 +34,8 @@
 
 #include "sdkconfig.h"
 
+#include "MPU9250_asukiaaa.h"
+
 #define GATTS_TAG "GATTS_DEMO"
 
 // #define GPIO_OUTPUT_IO_0    5
@@ -84,6 +86,14 @@ static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 #define TEST_MANUFACTURER_DATA_LEN  17
 
 #define GATTS_DEMO_CHAR_VAL_LEN_MAX 0x40
+
+mpu9250_t mpu9250_data = {
+    .address = MPU9250_ADDRESS_AD0_LOW,
+    .magXOffset = -60,
+    .magYOffset = -80,
+    .sdaPin = 26,
+    .sclPin = 25,
+};
 
 bool is_moving = false;
 uint32_t last_moved_millis;
@@ -660,10 +670,17 @@ void app_main()
     //init_led();
     init_switch();
     init_motors();
+    vTaskDelay(1000 / portTICK_RATE_MS);
+    mpu9250_mag_begin(&mpu9250_data);
 
     uint32_t  current_millis;
     while (1) {
         vTaskDelay(200 / portTICK_RATE_MS);
+        mpu9250_mag_update(&mpu9250_data);
+        printf("magValues: %03d %03d %03d\n",
+               mpu9250_mag_x(&mpu9250_data),
+               mpu9250_mag_y(&mpu9250_data),
+               mpu9250_mag_z(&mpu9250_data));
         current_millis = get_millis();
         if (is_moving && current_millis - last_moved_millis > 1000) {
             set_speed(0,0,0,0);
