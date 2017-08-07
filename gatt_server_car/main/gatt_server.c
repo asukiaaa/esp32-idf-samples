@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -36,6 +37,7 @@
 
 #include "MPU9250_asukiaaa.h"
 
+#define PI 3.14159265
 #define GATTS_TAG "GATTS_DEMO"
 
 // #define GPIO_OUTPUT_IO_0    5
@@ -59,6 +61,8 @@
 #define MOTOR_RIGHT_BACK_CHANNEL    LEDC_CHANNEL_3
 
 #define ESP_INTR_FLAG_DEFAULT 0
+
+float car_direction = 0;
 
 esp_gatt_if_t gatts_if_for_indicate = ESP_GATT_IF_NONE;
 static xQueueHandle gpio_evt_queue = NULL;
@@ -677,10 +681,12 @@ void app_main()
     while (1) {
         vTaskDelay(200 / portTICK_RATE_MS);
         mpu9250_mag_update(&mpu9250_data);
-        printf("magValues: %03d %03d %03d\n",
-               mpu9250_mag_x(&mpu9250_data),
-               mpu9250_mag_y(&mpu9250_data),
-               mpu9250_mag_z(&mpu9250_data));
+        // printf("magValues: %03d %03d %03d\n",
+        //        mpu9250_mag_x(&mpu9250_data),
+        //        mpu9250_mag_y(&mpu9250_data),
+        //        mpu9250_mag_z(&mpu9250_data));
+        car_direction = atan2((float) mpu9250_mag_x(&mpu9250_data),(float) mpu9250_mag_y(&mpu9250_data)) * 180 / PI;
+        // printf("direction: %f\n", direction);
         current_millis = get_millis();
         if (is_moving && current_millis - last_moved_millis > 1000) {
             set_speed(0,0,0,0);
