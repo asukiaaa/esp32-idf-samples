@@ -331,13 +331,13 @@ static void set_and_update_duty(uint8_t channel, uint8_t value) {
     ledc_update_duty(MOTOR_PWM_SPEED_MODE, channel);
 }
 
-static void set_speed_for_a_motor(uint8_t forward_channel, uint8_t forward_value, uint8_t back_channel, uint8_t back_value) {
-    // printf("values %d: %d; %d: %d;\n", forward_channel, forward_value, back_channel, back_value);
-    if (forward_value < back_value) {
-        back_value = back_value - forward_value;
+static void set_speed_for_a_motor(uint8_t value,uint8_t forward_channel, uint8_t back_channel) {
+    uint8_t back_value, forward_value;
+    if (value < 128) {
+        back_value = (128 - value) * 2;
         forward_value = 0;
     } else {
-        forward_value = forward_value - back_value;
+        forward_value = (value - 127) * 2;
         back_value = 0;
     }
     //printf("set duty %d: %d; %d: %d;\n", forward_channel, forward_value, back_channel, back_value);
@@ -345,35 +345,20 @@ static void set_speed_for_a_motor(uint8_t forward_channel, uint8_t forward_value
     set_and_update_duty(back_channel, back_value);
 }
 
-static void set_speed(uint8_t left_forward, uint8_t left_back, uint8_t right_forward, uint8_t right_back) {
-    set_speed_for_a_motor(MOTOR_LEFT_FORWARD_CHANNEL, left_forward,
-                          MOTOR_LEFT_BACK_CHANNEL, left_back);
-    set_speed_for_a_motor(MOTOR_RIGHT_FORWARD_CHANNEL, right_forward,
-                          MOTOR_RIGHT_BACK_CHANNEL, right_back);
-    if (left_forward == 0 && left_back == 0 && right_forward == 0 && right_back == 0) {
+static void set_speed(uint8_t left, uint8_t right) {
+    set_speed_for_a_motor(left,
+                          MOTOR_LEFT_FORWARD_CHANNEL,
+                          MOTOR_LEFT_BACK_CHANNEL);
+    set_speed_for_a_motor(right,
+                          MOTOR_RIGHT_FORWARD_CHANNEL,
+                          MOTOR_RIGHT_BACK_CHANNEL);
+    if (left == 0 && right == 0) {
         is_moving = false;
     } else {
         is_moving = true;
         last_moved_millis = get_millis();
         printf("set last_moved_milllis: %d\n", last_moved_millis);
     }
-}
-
-static void convert_fb_speed(uint8_t speed, uint8_t* f_speed, uint8_t* b_speed) {
-    if (speed < 128) {
-        *f_speed = 0;
-        *b_speed = (uint8_t) (((uint16_t) speed * 2) - 256);
-    } else {
-        *f_speed = (uint8_t) ((uint16_t) 255 - (speed * 2));
-        *b_speed = 0;
-    }
-}
-
-static void set_speed_with_2byte(uint8_t left, uint8_t right) {
-    uint8_t lf, lb, rf, rb;
-    convert_fb_speed(left, &lf, &lb);
-    convert_fb_speed(right, &rf, &rb);
-    set_speed(lf, lb, rf, rb);
 }
 
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
@@ -435,14 +420,9 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         ESP_LOGI(GATTS_TAG, "GATT_WRITE_EVT, conn_id %d, trans_id %d, handle %d\n", param->write.conn_id, param->write.trans_id, param->write.handle);
         ESP_LOGI(GATTS_TAG, "GATT_WRITE_EVT, value len %d, value %08x\n", param->write.len, *(uint32_t *)param->write.value);
         esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
-        if (param->write.len == 4) {
-            set_speed(param->write.value[0],
-                      param->write.value[1],
-                      param->write.value[2],
-                      param->write.value[3]);
-        } else if (param->write.len == 2) {
-            set_speed_with_2byte(param->write.value[0],
-                                 param->write.value[1]);
+        if (param->write.value[0] == 'm') {
+            set_speed(param->write.value[1],
+                      param->write.value[2]);
         }
         break;
     }
@@ -689,7 +669,7 @@ void app_main()
         // printf("direction: %f\n", direction);
         current_millis = get_millis();
         if (is_moving && current_millis - last_moved_millis > 1000) {
-            set_speed(0,0,0,0);
+            set_speed(0,0);
         }
     }
     return;
