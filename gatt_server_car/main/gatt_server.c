@@ -326,38 +326,39 @@ static void set_and_update_duty(uint8_t channel, uint8_t value) {
     } else {
         value_for_duty = (((uint32_t) value + 1) * 4) - 1; // expand value for 10bit
     }
-    printf("c: %03d, v: %03d, d: %04d\n", channel, value, value_for_duty);
+    // printf("c: %03d, v: %03d, d: %04d\n", channel, value, value_for_duty);
     ledc_set_duty(MOTOR_PWM_SPEED_MODE, channel, value_for_duty);
     ledc_update_duty(MOTOR_PWM_SPEED_MODE, channel);
 }
 
 static void set_speed_for_a_motor(uint8_t value,uint8_t forward_channel, uint8_t back_channel) {
-    uint8_t back_value, forward_value;
-    if (value < 128) {
-        back_value = (128 - value) * 2;
-        forward_value = 0;
-    } else {
-        forward_value = (value - 127) * 2;
-        back_value = 0;
+    uint8_t back_value = 0;
+    uint8_t forward_value = 0;
+    if (value < 127) {
+        back_value = (127 - value) * 2 + 1;
+    } else if (value > 128) {
+        forward_value = (value - 128) * 2 + 1;
     }
-    //printf("set duty %d: %d; %d: %d;\n", forward_channel, forward_value, back_channel, back_value);
+    // printf("set f: %d: b: %d;\n", forward_value, back_value);
     set_and_update_duty(forward_channel, forward_value);
     set_and_update_duty(back_channel, back_value);
 }
 
 static void set_speed(uint8_t left, uint8_t right) {
+    // printf("got left: %d: right: %d;\n", left, right);
     set_speed_for_a_motor(left,
                           MOTOR_LEFT_FORWARD_CHANNEL,
                           MOTOR_LEFT_BACK_CHANNEL);
     set_speed_for_a_motor(right,
                           MOTOR_RIGHT_FORWARD_CHANNEL,
                           MOTOR_RIGHT_BACK_CHANNEL);
-    if (left == 0 && right == 0) {
+    if ((left == 127 || left == 128) &&
+        (right == 127 || right == 128)) {
         is_moving = false;
     } else {
         is_moving = true;
         last_moved_millis = get_millis();
-        printf("set last_moved_milllis: %d\n", last_moved_millis);
+        // printf("set last_moved_milllis: %d\n", last_moved_millis);
     }
 }
 
