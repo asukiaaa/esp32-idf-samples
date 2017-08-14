@@ -362,6 +362,48 @@ static void set_speed(uint8_t left, uint8_t right) {
     }
 }
 
+static float get_diff_direction(int8_t plus_direction, uint8_t minus_direction) {
+    float target_directoin = (float)plus_direction - minus_direction;
+    float diff_direction = car_direction - target_directoin;
+    while (diff_direction > 180 || -180 > diff_direction) {
+        if (diff_direction > 180) {
+            diff_direction -= 180;
+        } else if (diff_direction < -180) {
+          diff_direction += 180;
+        }
+    }
+    return diff_direction;
+}
+
+static void get_speed_for_diff_direction(float diff_direction, uint8_t* right, uint8_t* left) {
+    // printf("diff direction: %f\n", diff_direction);
+    float plus_direction = (diff_direction > 0) ? diff_direction : - diff_direction;
+    uint8_t go_speed = 255;
+    uint8_t stop_speed = 128;
+    uint8_t right_speed = go_speed;
+    uint8_t left_speed;
+    if (plus_direction > 90) {
+        left_speed = stop_speed;
+    } else {
+      left_speed = (((float)90 - plus_direction) / 90) * (go_speed - stop_speed) + stop_speed;
+    }
+    if (diff_direction > 0) {
+        *right = right_speed;
+        *left = left_speed;
+    } else {
+        *left = right_speed;
+        *right = left_speed;
+    }
+    // printf("l: %03d r: %03d", *left, *right);
+}
+
+static void go_to_direction(int8_t plus_direction, uint8_t minus_direction) {
+    uint8_t left, right;
+    get_speed_for_diff_direction(get_diff_direction(plus_direction, minus_direction),
+                                 &left, &right);
+    set_speed(left, right);
+}
+
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
     switch (event) {
@@ -667,8 +709,9 @@ void app_main()
         //        mpu9250_mag_y(&mpu9250_data),
         //        mpu9250_mag_z(&mpu9250_data));
         car_direction = atan2((float) mpu9250_mag_x(&mpu9250_data),(float) mpu9250_mag_y(&mpu9250_data)) * 180 / PI;
-        // printf("direction: %f\n", direction);
+        // printf("direction: %f\n", car_direction);
         current_millis = get_millis();
+        // go_to_direction(90,0);
         if (is_moving && current_millis - last_moved_millis > 1000) {
             set_speed(0,0);
         }
