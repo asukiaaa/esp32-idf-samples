@@ -467,8 +467,10 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
             set_speed(param->write.value[1],
                       param->write.value[2]);
         } else if (param->write.value[0] == 'd') {
-            go_to_direction(param->write.value[1],
-                            param->write.value[2]);
+            if (param->write.value[3] != 0) {
+                go_to_direction(param->write.value[1],
+                                param->write.value[2]);
+            }
         }
         break;
     }
