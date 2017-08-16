@@ -704,6 +704,7 @@ void app_main()
     mpu9250_mag_begin(&mpu9250_data);
 
     uint32_t  current_millis;
+    uint8_t stop_speed = 128;
     while (1) {
         vTaskDelay(200 / portTICK_RATE_MS);
         mpu9250_mag_update(&mpu9250_data);
@@ -716,7 +717,7 @@ void app_main()
         current_millis = get_millis();
         // go_to_direction(90,0);
         if (is_moving && current_millis - last_moved_millis > 1000) {
-            set_speed(0,0);
+            set_speed(stop_speed, stop_speed);
         }
     }
     return;
