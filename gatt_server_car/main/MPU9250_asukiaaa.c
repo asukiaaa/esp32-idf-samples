@@ -97,7 +97,7 @@ int16_t mpu9250_mag_get(mpu9250_t *data, uint8_t high_index, uint8_t low_index) 
 }
 
 int16_t mag_adjust_value(uint16_t value, uint8_t adjust) {
-  return (value * ((((adjust - 128) * 0.5) / 128) + 1));
+  return (int16_t) ((int32_t) value * (((((int16_t) adjust - 128) / 2) / 128) + 1));
 }
 
 int16_t mpu9250_mag_x(mpu9250_t *data) {
