@@ -101,13 +101,13 @@ int16_t mag_adjust_value(int16_t value, uint8_t adjust) {
 }
 
 int16_t mpu9250_mag_x(mpu9250_t *data) {
-  return mag_adjust_value(mpu9250_mag_get(data, 1, 0), data->magXAdjust) + data->magXOffset;;
+  return mag_adjust_value(mpu9250_mag_get(data, 1, 0), data->magXAdjust) + data->magXOffset;
 }
 
 int16_t mpu9250_mag_y(mpu9250_t *data) {
-  return mag_adjust_value(mpu9250_mag_get(data, 3, 2), data->magYAdjust) + data->magYOffset;;
+  return mag_adjust_value(mpu9250_mag_get(data, 3, 2), data->magYAdjust) + data->magYOffset;
 }
 
 int16_t mpu9250_mag_z(mpu9250_t *data) {
-  return mag_adjust_value(mpu9250_mag_get(data, 5, 4), data->magZAdjust) + data->magZOffset;;
+  return mag_adjust_value(mpu9250_mag_get(data, 5, 4), data->magZAdjust) + data->magZOffset;
 }
